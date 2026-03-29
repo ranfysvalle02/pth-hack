@@ -1,0 +1,191 @@
+services:
+
+  # --- Local PyPI registry serving the malicious wheel ---
+  registry:
+    build:
+      context: .
+      dockerfile: registry/Dockerfile
+    networks:
+      - pth-demo
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/simple/')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # --- Git server for worm propagation ---
+  git-server:
+    build: ./git-server
+    networks:
+      - pth-demo
+    healthcheck:
+      test: ["CMD", "pgrep", "sshd"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # --- DNS exfiltration receiver ---
+  dns-exfil:
+    build: ./dns-exfil
+    networks:
+      - pth-demo
+    environment:
+      DASHBOARD_URL: http://dashboard:8000
+    depends_on:
+      dashboard:
+        condition: service_healthy
+
+  # --- Attacker C2 server ---
+  attacker-c2:
+    build: ./attacker-c2
+    networks:
+      - pth-demo
+    environment:
+      DASHBOARD_URL: http://dashboard:8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # --- Victim-1 container ---
+  victim:
+    build: ./victim
+    networks:
+      - pth-demo
+    environment:
+      DASHBOARD_URL: http://dashboard:8000
+      C2_URL: http://attacker-c2:9000
+      GIT_SERVER: git-server
+      GIT_REPO_PATH: /repos/internal-app.git
+      PAYLOAD_SOURCE: victim-1
+      DNS_EXFIL_HOST: dns-exfil
+      HOME: /root
+    depends_on:
+      registry:
+        condition: service_healthy
+      attacker-c2:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
+      git-server:
+        condition: service_healthy
+      dns-exfil:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # --- Victim-2 container (infected via git worm) ---
+  victim-2:
+    build: ./victim-2
+    networks:
+      - pth-demo
+    environment:
+      DASHBOARD_URL: http://dashboard:8000
+      C2_URL: http://attacker-c2:9000
+      GIT_SERVER: git-server
+      GIT_REPO_PATH: /repos/internal-app.git
+      REGISTRY_URL: http://registry:8080/simple/
+      PAYLOAD_SOURCE: victim-2
+      DNS_EXFIL_HOST: dns-exfil
+      GIT_POLL_INTERVAL: "5"
+      HOME: /root
+    depends_on:
+      registry:
+        condition: service_healthy
+      attacker-c2:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
+      git-server:
+        condition: service_healthy
+      dns-exfil:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # --- CI/CD Runner (infected via git worm) ---
+  ci-runner:
+    build: ./ci-runner
+    networks:
+      - pth-demo
+    environment:
+      DASHBOARD_URL: http://dashboard:8000
+      C2_URL: http://attacker-c2:9000
+      GIT_SERVER: git-server
+      GIT_REPO_PATH: /repos/internal-app.git
+      REGISTRY_URL: http://registry:8080/simple/
+      PAYLOAD_SOURCE: ci-runner
+      DNS_EXFIL_HOST: dns-exfil
+      GIT_POLL_INTERVAL: "5"
+      HOME: /root
+    depends_on:
+      registry:
+        condition: service_healthy
+      attacker-c2:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
+      git-server:
+        condition: service_healthy
+      dns-exfil:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # --- Dashboard (web UI + event hub) ---
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "3000:8000"
+    networks:
+      - pth-demo
+    volumes:
+      - captures:/captures
+    environment:
+      CAPTURES_DIR: /captures
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # --- Blue team detection engine ---
+  defender:
+    build: ./defender
+    networks:
+      - pth-demo
+    environment:
+      DASHBOARD_URL: http://dashboard:8000
+      DASHBOARD_WS: ws://dashboard:8000/ws
+      DETECTION_DELAY: "0.8"
+    depends_on:
+      dashboard:
+        condition: service_healthy
+
+  # --- Network capture sidecar ---
+  network-capture:
+    image: nicolaka/netshoot
+    network_mode: "service:dashboard"
+    command: ["tcpdump", "-i", "any", "-w", "/captures/pathogen.pcap", "-s", "0"]
+    volumes:
+      - captures:/captures
+    depends_on:
+      dashboard:
+        condition: service_healthy
+
+networks:
+  pth-demo:
+    driver: bridge
+
+volumes:
+  captures:

@@ -1,0 +1,122 @@
+[
+  {
+    "id": "SIGMA-001",
+    "name": "Malicious .pth File Deployed",
+    "description": "A .pth file containing import+exec was installed to site-packages",
+    "severity": "critical",
+    "mitre_technique": "T1546.016",
+    "mitre_name": "Event Triggered Execution",
+    "match_event_types": ["ci_pth_moved", "v2_pth_moved"],
+    "match_fields": {}
+  },
+  {
+    "id": "SIGMA-002",
+    "name": "Fileless Payload Served via HTTP",
+    "description": "C2 served a Python payload for in-memory execution",
+    "severity": "critical",
+    "mitre_technique": "T1059.006",
+    "mitre_name": "Command and Scripting Interpreter: Python",
+    "match_event_types": ["c2_stage_served"],
+    "match_fields": {}
+  },
+  {
+    "id": "SIGMA-003",
+    "name": "Credential Files Harvested",
+    "description": "Sensitive credential files (.ssh/*, .aws/*, .env) read by non-interactive process",
+    "severity": "high",
+    "mitre_technique": "T1552.001",
+    "mitre_name": "Unsecured Credentials: Credentials In Files",
+    "match_event_types": ["file_collected"],
+    "match_fields": {}
+  },
+  {
+    "id": "SIGMA-004",
+    "name": "Encrypted Exfiltration via HTTP POST",
+    "description": "Large encrypted payload exfiltrated to external endpoint",
+    "severity": "critical",
+    "mitre_technique": "T1041",
+    "mitre_name": "Exfiltration Over C2 Channel",
+    "match_event_types": ["exfil_complete"],
+    "match_fields": {}
+  },
+  {
+    "id": "SIGMA-005",
+    "name": "DNS TXT Exfiltration Detected",
+    "description": "Data encoded in DNS TXT query subdomains -- covert exfil channel",
+    "severity": "critical",
+    "mitre_technique": "T1048.003",
+    "mitre_name": "Exfiltration Over Alternative Protocol: DNS",
+    "match_event_types": ["dns_exfil_complete"],
+    "match_fields": {}
+  },
+  {
+    "id": "SIGMA-006",
+    "name": "Runtime HTTP Hook Installed",
+    "description": "urllib/requests monkey-patched for traffic interception",
+    "severity": "high",
+    "mitre_technique": "T1557",
+    "mitre_name": "Adversary-in-the-Middle",
+    "match_event_types": ["intercept_hook_installed"],
+    "match_fields": {}
+  },
+  {
+    "id": "SIGMA-007",
+    "name": "Bytecode Implant Dropped in Cache",
+    "description": "Compiled .pyc file persisted outside normal package directories",
+    "severity": "high",
+    "mitre_technique": "T1547",
+    "mitre_name": "Boot or Logon Autostart Execution",
+    "match_event_types": ["pycache_persisted"],
+    "match_fields": {}
+  },
+  {
+    "id": "SIGMA-008",
+    "name": "Git Repository Poisoned",
+    "description": "Malicious dependency injected into requirements.txt via git push",
+    "severity": "critical",
+    "mitre_technique": "T1195.002",
+    "mitre_name": "Supply Chain Compromise: Software Supply Chain",
+    "match_event_types": ["worm_push_success"],
+    "match_fields": {}
+  },
+  {
+    "id": "SIGMA-009",
+    "name": "Cross-Ecosystem Polyglot Callback",
+    "description": "npm postinstall script phoned home to C2 -- Python-to-Node escape",
+    "severity": "critical",
+    "mitre_technique": "T1204.002",
+    "mitre_name": "User Execution: Malicious File",
+    "match_event_types": ["c2_polyglot_triggered"],
+    "match_fields": {}
+  },
+  {
+    "id": "SIGMA-010",
+    "name": "Commit Masquerading as Dependabot",
+    "description": "Git commit impersonating automated dependency bot",
+    "severity": "medium",
+    "mitre_technique": "T1036.005",
+    "mitre_name": "Masquerading: Match Legitimate Name or Location",
+    "match_event_types": ["worm_requirements_modified"],
+    "match_fields": {}
+  },
+  {
+    "id": "SIGMA-011",
+    "name": "CI/CD Pipeline Compromised",
+    "description": "Build agent infected via poisoned dependency -- CI secrets exposed",
+    "severity": "critical",
+    "mitre_technique": "T1195.002",
+    "mitre_name": "Supply Chain Compromise: Software Supply Chain",
+    "match_event_types": ["ci_build_infected"],
+    "match_fields": {}
+  },
+  {
+    "id": "SIGMA-012",
+    "name": "Bytecode Implant Activated Post-Cleanup",
+    "description": "Persisted .pyc implant executed after package removal -- persistence confirmed",
+    "severity": "high",
+    "mitre_technique": "T1547",
+    "mitre_name": "Boot or Logon Autostart Execution",
+    "match_event_types": ["pycache_implant_activated", "v2_pycache_triggered"],
+    "match_fields": {}
+  }
+]

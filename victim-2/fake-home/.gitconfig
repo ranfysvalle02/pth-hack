@@ -1,0 +1,7 @@
+[user]
+    name = DevOps Engineer
+    email = devops@internal.dev
+[core]
+    autocrlf = input
+[pull]
+    rebase = true

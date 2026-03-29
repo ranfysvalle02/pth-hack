@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pathogen — Supply-Chain Attack Demo</title>
+<link rel="stylesheet" href="/static/css/tailwind.css">
+<style>
+  @font-face { font-family: 'Inter'; font-weight: 400; src: url('/static/fonts/inter-400.woff2') format('woff2'); }
+  @font-face { font-family: 'Inter'; font-weight: 500; src: url('/static/fonts/inter-500.woff2') format('woff2'); }
+  @font-face { font-family: 'Inter'; font-weight: 600; src: url('/static/fonts/inter-600.woff2') format('woff2'); }
+  @font-face { font-family: 'Inter'; font-weight: 700; src: url('/static/fonts/inter-700.woff2') format('woff2'); }
+  @font-face { font-family: 'Inter'; font-weight: 900; src: url('/static/fonts/inter-900.woff2') format('woff2'); }
+  @font-face { font-family: 'JetBrains Mono'; font-weight: 400; src: url('/static/fonts/jetbrains-mono-400.woff2') format('woff2'); }
+  @font-face { font-family: 'JetBrains Mono'; font-weight: 700; src: url('/static/fonts/jetbrains-mono-700.woff2') format('woff2'); }
+  body { font-family: 'Inter', sans-serif; background: #050507; }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+  .terminal { background: #0a0a0f; border: 1px solid #1a1a2e; }
+  .terminal-line { animation: fadeIn 0.15s ease-in; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+  @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 8px rgba(239,68,68,0.3); } 50% { box-shadow: 0 0 24px rgba(239,68,68,0.7); } }
+  @keyframes debrief-in { from { opacity:0; backdrop-filter: blur(0); } to { opacity:1; backdrop-filter: blur(12px); } }
+  .glow-red { animation: pulse-glow 2s ease-in-out infinite; }
+  .step-active { background: linear-gradient(135deg, #dc2626, #991b1b); color: white; }
+  .step-complete { background: linear-gradient(135deg, #16a34a, #15803d); color: white; }
+  .step-pending { background: #111118; color: #555; }
+  .stat-card { background: linear-gradient(135deg, #0f0f1a, #1a1a2e); border: 1px solid #1e1e30; }
+  .v2-tag { background: #7c3aed; color: white; font-size: 9px; padding: 1px 5px; border-radius: 4px; margin-right: 4px; font-weight: 600; }
+  .ci-tag { background: #2563eb; color: white; font-size: 9px; padding: 1px 5px; border-radius: 4px; margin-right: 4px; font-weight: 600; }
+  .c2-tag { background: #0d9488; color: white; font-size: 9px; padding: 1px 5px; border-radius: 4px; margin-right: 4px; font-weight: 600; }
+  .def-tag { background: #dc2626; color: white; font-size: 9px; padding: 1px 5px; border-radius: 4px; margin-right: 4px; font-weight: 600; }
+  .act-banner { padding: 6px 10px; margin: 4px 0; border-radius: 6px; font-weight: 700; font-size: 11px; letter-spacing: 0.5px; }
+  #debrief { animation: debrief-in 0.6s ease-out forwards; }
+  .mitre-card { transition: all 0.3s; }
+  .mitre-card.active { border-color: #ef4444; background: rgba(239,68,68,0.08); }
+  .mitre-card.active .mitre-id { color: #ef4444; }
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-thumb { background: #2a2a3e; border-radius: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body class="text-gray-300 min-h-screen flex">
+
+<!-- ATT&CK Sidebar -->
+<aside id="mitreSidebar" class="w-64 bg-[#08080d] border-r border-gray-800/60 flex flex-col shrink-0 overflow-hidden transition-all duration-300" style="margin-left: -256px;">
+  <div class="p-3 border-b border-gray-800/40">
+    <div class="flex items-center justify-between">
+      <div class="text-[10px] text-red-400 uppercase tracking-wider font-semibold">MITRE ATT&CK</div>
+      <div class="text-[10px] text-gray-600 font-mono"><span id="mitre-count">0</span>/12</div>
+    </div>
+  </div>
+  <div id="mitre-list" class="flex-1 overflow-y-auto p-2 space-y-1.5"></div>
+</aside>
+
+<!-- Main content -->
+<div class="flex-1 flex flex-col min-w-0">
+
+<header class="border-b border-gray-800/60 px-6 py-3 flex items-center justify-between bg-[#08080d] shrink-0">
+  <div class="flex items-center gap-3">
+    <div class="w-9 h-9 rounded-lg bg-red-600 flex items-center justify-center font-black text-white text-[11px] tracking-tight">PTH</div>
+    <div>
+      <h1 class="text-lg font-bold text-white tracking-tight">Pathogen <span class="text-gray-500 font-normal text-sm">Supply-Chain Attack Demo</span></h1>
+      <p class="text-[11px] text-gray-600 font-mono">steal &rarr; exfil &rarr; dns &rarr; wiretap &rarr; persist &rarr; spread &rarr; polyglot &rarr; ci/cd</p>
+    </div>
+  </div>
+  <div class="flex items-center gap-3">
+    <div id="services" class="flex gap-2 text-xs"></div>
+    <button id="btnMitre" onclick="toggleMitre()" class="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-xs text-gray-400 border border-gray-700 transition">ATT&CK</button>
+    <button id="btnReplay" onclick="startReplay()" class="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-xs text-gray-400 border border-gray-700 transition hidden">Replay</button>
+    <select id="replaySpeed" class="bg-gray-800 text-xs text-gray-400 border border-gray-700 rounded px-1 py-1 hidden">
+      <option value="1">1x</option><option value="2" selected>2x</option><option value="5">5x</option><option value="10">10x</option>
+    </select>
+    <button id="btnReset" onclick="resetAttack()" class="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-xs text-gray-400 border border-gray-700 transition hidden">Reset</button>
+    <button id="btnLaunch" onclick="launchAttack()" class="px-5 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-bold text-white transition glow-red">Launch Attack</button>
+  </div>
+</header>
+
+<!-- Step stepper -->
+<div class="px-6 py-2.5 border-b border-gray-800/40 bg-[#08080d] shrink-0">
+  <div class="flex items-center gap-1.5 max-w-7xl mx-auto flex-wrap">
+    <div id="step-0" class="step-pending flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-300">
+      <span class="w-5 h-5 rounded-full bg-gray-700/50 flex items-center justify-center text-[10px]">0</span>Install
+    </div>
+    <span class="text-gray-800 text-[10px]">&#9654;</span>
+    <div id="step-trigger" class="step-pending flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-300">
+      <span class="w-5 h-5 rounded-full bg-gray-700/50 flex items-center justify-center text-[10px]">&#9889;</span>.pth
+    </div>
+    <span class="text-gray-800 text-[10px]">&#9654;</span>
+    <div id="step-1" class="step-pending flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-300">
+      <span class="w-5 h-5 rounded-full bg-gray-700/50 flex items-center justify-center text-[10px]">1</span>Steal
+    </div>
+    <span class="text-gray-800 text-[10px]">&#9654;</span>
+    <div id="step-2" class="step-pending flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-300">
+      <span class="w-5 h-5 rounded-full bg-gray-700/50 flex items-center justify-center text-[10px]">2</span>Exfil
+    </div>
+    <span class="text-gray-800 text-[10px]">&#9654;</span>
+    <div id="step-dns" class="step-pending flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-300">
+      <span class="w-5 h-5 rounded-full bg-gray-700/50 flex items-center justify-center text-[10px]">&#128268;</span>DNS
+    </div>
+    <span class="text-gray-800 text-[10px]">&#9654;</span>
+    <div id="step-3" class="step-pending flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-300">
+      <span class="w-5 h-5 rounded-full bg-gray-700/50 flex items-center justify-center text-[10px]">3</span>Wiretap
+    </div>
+    <span class="text-gray-800 text-[10px]">&#9654;</span>
+    <div id="step-persist" class="step-pending flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-300">
+      <span class="w-5 h-5 rounded-full bg-gray-700/50 flex items-center justify-center text-[10px]">&#128274;</span>Cache
+    </div>
+    <span class="text-gray-800 text-[10px]">&#9654;</span>
+    <div id="step-4" class="step-pending flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-300">
+      <span class="w-5 h-5 rounded-full bg-gray-700/50 flex items-center justify-center text-[10px]">4</span>Spread
+    </div>
+    <span class="text-gray-800 text-[10px]">&#9654;</span>
+    <div id="step-poly" class="step-pending flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-300">
+      <span class="w-5 h-5 rounded-full bg-gray-700/50 flex items-center justify-center text-[10px]">&#127760;</span>Polyglot
+    </div>
+    <span class="text-gray-800 text-[10px]">&#9654;</span>
+    <div id="step-ci" class="step-pending flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-300">
+      <span class="w-5 h-5 rounded-full bg-gray-700/50 flex items-center justify-center text-[10px]">&#9881;</span>CI/CD
+    </div>
+  </div>
+</div>
+
+<!-- Stats row -->
+<div class="px-6 py-2 grid grid-cols-8 gap-2 shrink-0">
+  <div class="stat-card rounded-xl p-2"><div class="text-[9px] text-gray-500 uppercase tracking-wider">Files Stolen</div><div id="stat-files" class="text-lg font-bold font-mono text-white mt-0.5">0</div></div>
+  <div class="stat-card rounded-xl p-2"><div class="text-[9px] text-gray-500 uppercase tracking-wider">Exfil Bytes</div><div id="stat-bytes" class="text-lg font-bold font-mono text-white mt-0.5">0</div></div>
+  <div class="stat-card rounded-xl p-2"><div class="text-[9px] text-gray-500 uppercase tracking-wider">DNS Queries</div><div id="stat-dns" class="text-lg font-bold font-mono text-white mt-0.5">0</div></div>
+  <div class="stat-card rounded-xl p-2"><div class="text-[9px] text-gray-500 uppercase tracking-wider">Intercepted</div><div id="stat-intercepts" class="text-lg font-bold font-mono text-white mt-0.5">0</div></div>
+  <div class="stat-card rounded-xl p-2"><div class="text-[9px] text-gray-500 uppercase tracking-wider">Implants</div><div id="stat-pycache" class="text-lg font-bold font-mono text-white mt-0.5">0</div></div>
+  <div class="stat-card rounded-xl p-2"><div class="text-[9px] text-gray-500 uppercase tracking-wider">Repos Poisoned</div><div id="stat-repos" class="text-lg font-bold font-mono text-white mt-0.5">0</div></div>
+  <div class="stat-card rounded-xl p-2"><div class="text-[9px] text-gray-500 uppercase tracking-wider">Hosts Owned</div><div id="stat-hosts" class="text-lg font-bold font-mono text-white mt-0.5">0</div></div>
+  <div class="stat-card rounded-xl p-2 border-red-900/30"><div class="text-[9px] text-red-500 uppercase tracking-wider">Detections</div><div id="stat-detections" class="text-lg font-bold font-mono text-red-400 mt-0.5">0</div></div>
+</div>
+
+<!-- Terminal grid: row 1 -->
+<div class="px-6 pb-2 grid grid-cols-3 gap-3 flex-1 min-h-0" style="height: calc(100vh - 520px); min-height: 160px;">
+  <div class="flex flex-col min-h-0">
+    <div class="text-[10px] text-red-400 mb-1 uppercase tracking-wider font-semibold">Attack Timeline</div>
+    <div id="term-victim" class="terminal rounded-xl p-3 flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed"><div class="text-gray-700 italic">Awaiting launch...</div></div>
+  </div>
+  <div class="flex flex-col min-h-0">
+    <div class="text-[10px] text-amber-400 mb-1 uppercase tracking-wider font-semibold">Stolen Files</div>
+    <div id="term-files" class="terminal rounded-xl p-3 flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed"><div class="text-gray-700 italic">No files yet</div></div>
+  </div>
+  <div class="flex flex-col min-h-0">
+    <div class="text-[10px] text-emerald-400 mb-1 uppercase tracking-wider font-semibold">C2 Server</div>
+    <div id="term-c2" class="terminal rounded-xl p-3 flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed"><div class="text-gray-700 italic">C2 online, waiting for callbacks...</div></div>
+  </div>
+</div>
+
+<!-- Terminal grid: row 2 -->
+<div class="px-6 pb-2 grid grid-cols-4 gap-3 shrink-0">
+  <div>
+    <div class="text-[10px] text-cyan-400 mb-1 uppercase tracking-wider font-semibold">Runtime Wiretap</div>
+    <div id="term-wiretap" class="terminal rounded-xl p-3 h-32 overflow-y-auto font-mono text-[11px] leading-relaxed"><div class="text-gray-700 italic">Hooks not yet installed</div></div>
+  </div>
+  <div>
+    <div class="text-[10px] text-violet-400 mb-1 uppercase tracking-wider font-semibold">Worm &amp; Polyglot</div>
+    <div id="term-spread" class="terminal rounded-xl p-3 h-32 overflow-y-auto font-mono text-[11px] leading-relaxed"><div class="text-gray-700 italic">Awaiting Stage 4</div></div>
+  </div>
+  <div>
+    <div class="text-[10px] text-blue-400 mb-1 uppercase tracking-wider font-semibold">DNS Exfil</div>
+    <div id="term-dns" class="terminal rounded-xl p-3 h-32 overflow-y-auto font-mono text-[11px] leading-relaxed"><div class="text-gray-700 italic">DNS channel idle</div></div>
+  </div>
+  <div>
+    <div class="text-[10px] text-blue-300 mb-1 uppercase tracking-wider font-semibold">CI/CD Pipeline</div>
+    <div id="term-ci" class="terminal rounded-xl p-3 h-32 overflow-y-auto font-mono text-[11px] leading-relaxed"><div class="text-gray-700 italic">CI runner waiting</div></div>
+  </div>
+</div>
+
+<!-- Terminal grid: row 3 - detections -->
+<div class="px-6 pb-4 shrink-0">
+  <div class="text-[10px] text-red-500 mb-1 uppercase tracking-wider font-semibold">Detections (Blue Team)</div>
+  <div id="term-detections" class="terminal rounded-xl p-3 h-28 overflow-y-auto font-mono text-[11px] leading-relaxed" style="border-color: #7f1d1d;"><div class="text-gray-700 italic">Detection engine online -- monitoring...</div></div>
+</div>
+
+</div><!-- end main content -->
+
+<!-- Debrief overlay -->
+<div id="debrief" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+  <div class="bg-[#0c0c14] border border-red-900/40 rounded-2xl p-10 max-w-2xl text-center shadow-2xl shadow-red-900/20">
+    <div class="text-5xl mb-4">&#9760;</div>
+    <h2 class="text-2xl font-black text-white mb-2">ATTACK COMPLETE</h2>
+    <p class="text-gray-400 text-sm mb-6">Three hosts compromised. Python + Node.js execution paths triggered. CI/CD pipeline owned. Zero vulnerabilities exploited -- only documented features.</p>
+    <div class="grid grid-cols-4 gap-3 mb-6 text-left">
+      <div class="bg-[#111118] rounded-lg p-3"><div class="text-[9px] text-gray-500 uppercase">Files Stolen</div><div id="debrief-files" class="text-lg font-bold font-mono text-red-400">0</div></div>
+      <div class="bg-[#111118] rounded-lg p-3"><div class="text-[9px] text-gray-500 uppercase">Requests Tapped</div><div id="debrief-intercepts" class="text-lg font-bold font-mono text-cyan-400">0</div></div>
+      <div class="bg-[#111118] rounded-lg p-3"><div class="text-[9px] text-gray-500 uppercase">Repos Poisoned</div><div id="debrief-repos" class="text-lg font-bold font-mono text-violet-400">0</div></div>
+      <div class="bg-[#111118] rounded-lg p-3"><div class="text-[9px] text-gray-500 uppercase">Detections</div><div id="debrief-detections" class="text-lg font-bold font-mono text-red-400">0</div></div>
+    </div>
+    <div class="text-[11px] text-gray-600 mb-6 font-mono">
+      .pth &rarr; exec() &rarr; dns exfil &rarr; monkey-patch &rarr; __pycache__ &rarr; git push &rarr; npm postinstall &rarr; ci/cd
+    </div>
+    <div class="flex gap-3 justify-center">
+      <a href="/api/pcap/download" class="px-4 py-2 rounded-lg bg-blue-900/40 hover:bg-blue-900/60 text-sm text-blue-300 border border-blue-800/40 transition inline-block">Download PCAP</a>
+      <button onclick="document.getElementById('debrief').classList.add('hidden')" class="px-6 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm text-gray-300 border border-gray-700 transition">Dismiss</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const WS_URL = `ws://${location.host}/ws`;
+let ws = null;
+
+let fileCount = 0, bytesExfil = 0, interceptCount = 0, pycacheCount = 0, reposCount = 0, hostsCount = 0, dnsCount = 0, detectCount = 0;
+let currentStep = null;
+const cleared = {};
+let mitreOpen = false;
+
+function el(id) { return document.getElementById(id); }
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
+function ts(epoch) { return new Date(epoch * 1000).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+function srcTag(evt) {
+  if (evt.source === 'victim-2') return '<span class="v2-tag">V2</span>';
+  if (evt.source === 'ci-runner') return '<span class="ci-tag">CI</span>';
+  return '';
+}
+function c2Tag() { return '<span class="c2-tag">C2</span>'; }
+function defTag() { return '<span class="def-tag">DET</span>'; }
+
+function add(termId, html) {
+  const t = el(termId);
+  if (!cleared[termId]) { t.innerHTML = ''; cleared[termId] = true; }
+  const d = document.createElement('div');
+  d.className = 'terminal-line';
+  d.innerHTML = html;
+  t.appendChild(d);
+  t.scrollTop = t.scrollHeight;
+}
+
+function addBanner(termId, text, color) {
+  const t = el(termId);
+  if (!cleared[termId]) { t.innerHTML = ''; cleared[termId] = true; }
+  const d = document.createElement('div');
+  d.className = 'act-banner';
+  d.style.background = `linear-gradient(135deg, ${color}22, ${color}08)`;
+  d.style.borderLeft = `3px solid ${color}`;
+  d.style.color = color;
+  d.innerHTML = text;
+  t.appendChild(d);
+  t.scrollTop = t.scrollHeight;
+}
+
+function setStep(id) {
+  if (currentStep) {
+    el(currentStep).className = el(currentStep).className.replace('step-active', 'step-complete');
+  }
+  currentStep = id;
+  if (id) {
+    el(id).className = el(id).className.replace('step-pending', 'step-active');
+  }
+}
+
+function stat(id, v) { el(id).textContent = typeof v === 'number' ? v.toLocaleString() : v; }
+function fmtBytes(n) { if (n < 1024) return n + ' B'; if (n < 1048576) return (n / 1024).toFixed(1) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
+
+// --- MITRE ATT&CK ---
+const MITRE_MAP = [
+  { id: 'T1546.016', name: 'Event Triggered Execution', events: ['payload_start'], act: 'Trigger' },
+  { id: 'T1552.001', name: 'Unsecured Credentials: Files', events: ['file_collected'], act: 'Steal' },
+  { id: 'T1552.004', name: 'Private Keys', events: ['file_collected'], act: 'Steal' },
+  { id: 'T1041', name: 'Exfil Over C2 Channel', events: ['exfil_complete'], act: 'Exfil' },
+  { id: 'T1048.003', name: 'Exfil Over DNS', events: ['dns_exfil_sent', 'dns_exfil_complete'], act: 'DNS' },
+  { id: 'T1557', name: 'Adversary-in-the-Middle', events: ['intercept_hook_installed'], act: 'Wiretap' },
+  { id: 'T1547', name: 'Autostart: Bytecode Persist', events: ['pycache_persisted'], act: 'Persist' },
+  { id: 'T1195.002', name: 'Supply Chain Compromise', events: ['worm_push_success'], act: 'Spread' },
+  { id: 'T1204.002', name: 'User Execution: Malicious File', events: ['c2_polyglot_triggered'], act: 'Polyglot' },
+  { id: 'T1036.005', name: 'Masquerading: Dependabot', events: ['worm_requirements_modified'], act: 'Spread' },
+  { id: 'T1059.006', name: 'Python Scripting Interpreter', events: ['c2_stage_served'], act: 'Trigger' },
+  { id: 'T1195.002b', name: 'CI/CD Pipeline Compromise', events: ['ci_build_infected'], act: 'CI/CD' },
+];
+const mitreTriggered = new Set();
+
+function initMitre() {
+  const list = el('mitre-list');
+  MITRE_MAP.forEach((m, i) => {
+    list.innerHTML += `<div id="mitre-${i}" class="mitre-card rounded-lg p-2 border border-gray-800/40 bg-[#0a0a12] cursor-pointer" onclick="window.open('https://attack.mitre.org/techniques/${m.id.replace(/b$/,'')}','_blank')">
+      <div class="flex items-center justify-between">
+        <span class="mitre-id text-[10px] font-mono text-gray-600">${esc(m.id.replace(/b$/,''))}</span>
+        <span class="text-[9px] text-gray-700">${esc(m.act)}</span>
+      </div>
+      <div class="text-[10px] text-gray-500 mt-0.5">${esc(m.name)}</div>
+    </div>`;
+  });
+}
+
+function checkMitre(eventType) {
+  MITRE_MAP.forEach((m, i) => {
+    if (m.events.includes(eventType) && !mitreTriggered.has(i)) {
+      mitreTriggered.add(i);
+      const card = el(`mitre-${i}`);
+      if (card) card.classList.add('active');
+      stat('mitre-count', mitreTriggered.size);
+    }
+  });
+}
+
+function toggleMitre() {
+  mitreOpen = !mitreOpen;
+  el('mitreSidebar').style.marginLeft = mitreOpen ? '0' : '-256px';
+}
+
+// --- Main event handler ---
+function handle(evt) {
+  const t = evt.type, d = evt.data || {}, time = `<span class="text-gray-600">[${ts(evt.timestamp)}]</span>`, tag = srcTag(evt);
+
+  if (t === 'reset') { location.reload(); return; }
+  if (t === 'replay_complete') { add('term-victim', `${time} <span class="text-green-400">Replay complete (${d.events_replayed} events)</span>`); return; }
+
+  checkMitre(t);
+
+  // --- Victim orchestration events ---
+  if (t === 'victim_log') add('term-victim', `${time} ${tag}${esc(d.message)}`);
+  if (t === 'stage_change') {
+    if (d.stage === 0) setStep('step-0');
+    if (d.stage === 'trigger') setStep('step-trigger');
+    add('term-victim', `${time} ${tag}<span class="text-yellow-400 font-semibold">${esc(d.label)}</span>`);
+  }
+
+  // --- Payload: start ---
+  if (t === 'payload_start') {
+    if (evt.source !== 'victim-2' && evt.source !== 'ci-runner') setStep('step-trigger');
+    addBanner('term-victim', `${tag}PAYLOAD EXECUTING (fileless, in-memory)`, '#ef4444');
+  }
+
+  // --- Act 1: Steal ---
+  if (t === 'stage1_start') {
+    if (evt.source !== 'victim-2' && evt.source !== 'ci-runner') setStep('step-1');
+    addBanner('term-victim', `${tag}ACT 1 &#8212; CREDENTIAL HARVEST`, '#f59e0b');
+  }
+  if (t === 'file_collected') {
+    fileCount++;
+    stat('stat-files', fileCount);
+    add('term-files', `${tag}<span class="text-gray-500">${esc(d.category)}</span> <span class="text-amber-300">${esc(d.path)}</span> <span class="text-gray-600">${fmtBytes(d.size)}</span>`);
+  }
+  if (t === 'env_collected') {
+    add('term-files', `${tag}<span class="text-gray-500">Env Vars</span> <span class="text-amber-300">${d.count} variables</span> <span class="text-gray-600">[${esc((d.keys || []).slice(0, 5).join(', '))}...]</span>`);
+  }
+  if (t === 'stage1_complete') {
+    add('term-victim', `${time} ${tag}<span class="text-green-400">${d.files_count} files + ${d.env_vars} env vars harvested</span>`);
+  }
+
+  // --- Act 2: Exfil ---
+  if (t === 'stage2_start') {
+    if (evt.source !== 'victim-2' && evt.source !== 'ci-runner') setStep('step-2');
+    addBanner('term-victim', `${tag}ACT 2 &#8212; ENCRYPTED EXFILTRATION`, '#f59e0b');
+  }
+  if (t === 'tar_created') add('term-victim', `${time} ${tag}<span class="text-gray-400">tar.gz archive: ${fmtBytes(d.size)}, ${d.file_count} files</span>`);
+  if (t === 'aes_encrypted') add('term-victim', `${time} ${tag}<span class="text-gray-400">AES-256-CBC encrypted (${fmtBytes(d.ciphertext_size)})</span>`);
+  if (t === 'rsa_encrypted') add('term-victim', `${time} ${tag}<span class="text-gray-400">RSA-4096 key wrap (${d.encrypted_key_size}B)</span>`);
+  if (t === 'payload_built') add('term-victim', `${time} ${tag}<span class="text-gray-400">exfil payload assembled: ${fmtBytes(d.total_size)}</span>`);
+  if (t === 'exfil_complete') {
+    bytesExfil += d.bytes_sent || 0;
+    stat('stat-bytes', fmtBytes(bytesExfil));
+    add('term-victim', `${time} ${tag}<span class="text-red-400 font-semibold">POST /exfil &#8594; ${d.status}</span>`);
+  }
+
+  // --- DNS Exfil ---
+  if (t === 'dns_exfil_start') {
+    if (evt.source !== 'victim-2' && evt.source !== 'ci-runner') setStep('step-dns');
+    addBanner('term-dns', `${tag}DNS TXT EXFILTRATION`, '#3b82f6');
+  }
+  if (t === 'dns_exfil_chunk_sent') {
+    dnsCount++;
+    stat('stat-dns', dnsCount);
+    add('term-dns', `${time} ${tag}<span class="text-blue-300">TXT query ${d.chunk}/${d.total_chunks}</span> <span class="text-gray-600">session:${esc(d.session)}</span>`);
+  }
+  if (t === 'dns_exfil_chunk') {
+    add('term-dns', `${time} <span class="text-blue-400">&#8592; chunk ${d.chunk} received</span> <span class="text-gray-600">${fmtBytes(d.size)}</span>`);
+  }
+  if (t === 'dns_exfil_sent') {
+    add('term-dns', `${time} ${tag}<span class="text-blue-400 font-semibold">DNS exfil complete: ${d.total_chunks} queries, ${fmtBytes(d.total_bytes)}</span>`);
+  }
+  if (t === 'dns_exfil_complete') {
+    addBanner('term-dns', `REASSEMBLED: ${d.total_chunks} chunks, ${fmtBytes(d.total_bytes)}`, '#3b82f6');
+    if (d.preview) add('term-dns', `<span class="text-gray-500 text-[10px]">${esc(d.preview.slice(0, 120))}</span>`);
+  }
+
+  // --- C2 events ---
+  if (t === 'c2_stage_served') add('term-c2', `${time} ${c2Tag()}<span class="text-cyan-400">served fileless payload (${fmtBytes(d.size)})</span>`);
+  if (t === 'c2_received') add('term-c2', `${time} ${c2Tag()}<span class="text-emerald-400">received exfil from <b>${esc(d.hostname)}</b></span>`);
+  if (t === 'c2_rsa_decrypted') add('term-c2', `${time} ${c2Tag()}<span class="text-emerald-300">RSA decrypted session key</span>`);
+  if (t === 'c2_aes_decrypted') add('term-c2', `${time} ${c2Tag()}<span class="text-emerald-300">AES decrypted archive (${fmtBytes(d.tar_size)})</span>`);
+  if (t === 'c2_file_decrypted') {
+    const preview = (d.preview || '').slice(0, 80).replace(/\n/g, ' ');
+    add('term-files', `${c2Tag()}<span class="text-emerald-400">${esc(d.path)}</span> <span class="text-gray-600">${fmtBytes(d.size)}</span>`);
+    if (preview) add('term-files', `<span class="text-gray-600 ml-4 text-[10px]">${esc(preview)}</span>`);
+  }
+  if (t === 'c2_decryption_complete') add('term-c2', `${time} ${c2Tag()}<span class="text-emerald-400 font-semibold">decrypted ${d.total_files} files from ${esc(d.hostname)}</span>`);
+  if (t === 'c2_lab_request') add('term-c2', `${time} ${c2Tag()}<span class="text-cyan-300/60">internal-api ${esc(d.method)} ${esc(JSON.stringify(d.query || {}))}</span>`);
+
+  // --- Act 3: Wiretap + Persist ---
+  if (t === 'stage3_start') {
+    if (evt.source !== 'victim-2' && evt.source !== 'ci-runner') setStep('step-3');
+    addBanner('term-victim', `${tag}ACT 3 &#8212; RUNTIME WIRETAP + PERSISTENCE`, '#06b6d4');
+  }
+  if (t === 'intercept_hook_installed') {
+    addBanner('term-wiretap', `${tag}HOOKS INSTALLED: ${(d.patched_libraries || []).join(', ')}`, '#06b6d4');
+  }
+  if (t === 'intercept_simulation_start') add('term-wiretap', `${time} ${tag}<span class="text-gray-500">simulating normal app traffic...</span>`);
+  if (t === 'intercept_request_captured') {
+    interceptCount++;
+    stat('stat-intercepts', interceptCount);
+    add('term-wiretap', `${time} ${tag}<span class="text-cyan-300">${esc(d.lib)}</span> <span class="text-white">${esc(d.method)}</span> <span class="text-cyan-200/70">${esc(d.url)}</span>`);
+  }
+  if (t === 'intercept_simulation_complete') add('term-wiretap', `${time} ${tag}<span class="text-cyan-400">wiretap captured live traffic</span>`);
+  if (t === 'pycache_persisted') {
+    pycacheCount++;
+    stat('stat-pycache', pycacheCount);
+    if (evt.source !== 'victim-2' && evt.source !== 'ci-runner') setStep('step-persist');
+    addBanner('term-wiretap', `${tag}__pycache__ IMPLANT DROPPED`, '#f97316');
+    add('term-wiretap', `${time} ${tag}<span class="text-orange-300">${esc(d.path)}</span> <span class="text-gray-600">(${fmtBytes(d.size)})</span>`);
+  }
+  if (t === 'pycache_implant_activated') {
+    pycacheCount++;
+    stat('stat-pycache', pycacheCount);
+    addBanner('term-wiretap', `${tag}IMPLANT ACTIVATED (persistence confirmed)`, '#ef4444');
+  }
+  if (t === 'v2_pycache_triggered' || t === 'v2_pycache_verify') {
+    add('term-wiretap', `${time} ${tag}<span class="text-orange-400">${esc(d.message || 'pycache implant executed')}</span>`);
+  }
+  if (t === 'stage3_complete') {
+    add('term-victim', `${time} ${tag}<span class="text-green-400">${esc(d.message)}</span>`);
+  }
+
+  // --- Act 4: Spread + Polyglot ---
+  if (t === 'stage4_start') {
+    if (evt.source !== 'victim-2' && evt.source !== 'ci-runner') setStep('step-4');
+    addBanner('term-victim', `${tag}ACT 4 &#8212; GIT WORM + POLYGLOT ESCAPE`, '#8b5cf6');
+  }
+  if (t === 'worm_ssh_key_found') add('term-spread', `${time} ${tag}<span class="text-violet-300">SSH key found: ${esc(d.path)}</span>`);
+  if (t === 'worm_repo_cloned') add('term-spread', `${time} ${tag}cloned <span class="text-white">${esc(d.repo)}</span>`);
+  if (t === 'worm_requirements_modified') add('term-spread', `${time} ${tag}<span class="text-red-400">poisoned requirements.txt</span> <span class="text-gray-500">+${esc(d.added)}</span>`);
+  if (t === 'worm_polyglot_seeded') addBanner('term-spread', `${tag}POLYGLOT SEED: package.json postinstall`, '#a855f7');
+  if (t === 'worm_push_success') {
+    reposCount++;
+    stat('stat-repos', reposCount);
+    add('term-spread', `${time} ${tag}<span class="text-violet-400 font-semibold">git push main &#8594; ${esc(d.commit)}</span>`);
+  }
+  if (t === 'worm_already_infected') add('term-spread', `${time} ${tag}<span class="text-gray-500">repo already infected</span>`);
+  if (t === 'stage4_complete') add('term-victim', `${time} ${tag}<span class="text-green-400">${esc(d.message)}</span>`);
+
+  // --- Victim-2 watcher events ---
+  if (t === 'v2_watcher_started') add('term-spread', `${time} ${tag}<span class="text-gray-500">git watcher polling...</span>`);
+  if (t === 'v2_repo_cloned') add('term-spread', `${time} ${tag}victim-2 cloned repo`);
+  if (t === 'v2_new_commits') add('term-spread', `${time} ${tag}<span class="text-violet-300">new commits detected</span> <span class="text-gray-500">${esc(d.local)} &#8594; ${esc(d.remote)}</span>`);
+  if (t === 'v2_poisoned_requirements') add('term-spread', `${time} ${tag}<span class="text-red-400">poisoned requirements.txt found</span>`);
+  if (t === 'v2_polyglot_seed_detected') add('term-spread', `${time} ${tag}<span class="text-violet-400">polyglot seed detected in package.json</span>`);
+  if (t === 'v2_polyglot_installing') {
+    addBanner('term-spread', `${tag}npm install (postinstall hook armed)`, '#a855f7');
+  }
+  if (t === 'v2_polyglot_complete') add('term-spread', `${time} ${tag}<span class="text-violet-300">npm exit: ${d.returncode}</span>`);
+  if (t === 'c2_polyglot_triggered') {
+    if (!currentStep || currentStep !== 'step-poly') setStep('step-poly');
+    addBanner('term-spread', `POLYGLOT CALLBACK: Node.js &#8594; C2`, '#d946ef');
+    add('term-spread', `${time} <span class="text-fuchsia-300">${esc(d.source || d.event || 'node-host')}: ${esc(d.note || 'postinstall reached C2')}</span>`);
+  }
+
+  // --- CI/CD events ---
+  if (t === 'ci_watcher_started') add('term-ci', `${time} <span class="ci-tag">CI</span><span class="text-gray-500">build agent polling...</span>`);
+  if (t === 'ci_repo_cloned') add('term-ci', `${time} <span class="ci-tag">CI</span>cloned internal-app repo`);
+  if (t === 'ci_new_commits') add('term-ci', `${time} <span class="ci-tag">CI</span><span class="text-blue-300">new commits detected</span> <span class="text-gray-500">${esc(d.local)} &#8594; ${esc(d.remote)}</span>`);
+  if (t === 'ci_poisoned_requirements') add('term-ci', `${time} <span class="ci-tag">CI</span><span class="text-red-400">poisoned deps in requirements.txt</span>`);
+  if (t === 'ci_pipeline_triggered') {
+    setStep('step-ci');
+    addBanner('term-ci', `CI PIPELINE TRIGGERED`, '#2563eb');
+  }
+  if (t === 'ci_build_start') add('term-ci', `${time} <span class="ci-tag">CI</span><span class="text-blue-300">${esc(d.message)}</span>`);
+  if (t === 'ci_pip_complete') add('term-ci', `${time} <span class="ci-tag">CI</span>pip exit: ${d.returncode}`);
+  if (t === 'ci_pth_moved') add('term-ci', `${time} <span class="ci-tag">CI</span><span class="text-gray-500">.pth deployed in CI env</span>`);
+  if (t === 'ci_triggering') add('term-ci', `${time} <span class="ci-tag">CI</span><span class="text-red-400">${esc(d.message)}</span>`);
+  if (t === 'ci_build_infected') {
+    hostsCount++;
+    stat('stat-hosts', hostsCount);
+    addBanner('term-ci', `CI RUNNER COMPROMISED`, '#ef4444');
+    add('term-ci', `${time} <span class="ci-tag">CI</span><span class="text-red-400 font-semibold">${esc(d.message)}</span>`);
+  }
+
+  // --- V2 pip/trigger events ---
+  if (t === 'v2_installing') add('term-victim', `${time} ${tag}<span class="text-yellow-400">${esc(d.message)}</span>`);
+  if (t === 'v2_pip_complete') add('term-victim', `${time} ${tag}pip exit: ${d.returncode}`);
+  if (t === 'v2_pth_moved') add('term-victim', `${time} ${tag}<span class="text-gray-500">.pth deployed</span>`);
+  if (t === 'v2_triggering') add('term-victim', `${time} ${tag}<span class="text-red-400">${esc(d.message)}</span>`);
+
+  // --- Completion ---
+  if (t === 'payload_complete' && evt.source !== 'victim-2' && evt.source !== 'ci-runner') {
+    hostsCount++;
+    stat('stat-hosts', hostsCount);
+    add('term-victim', `${time} ${tag}<span class="text-green-400 font-semibold">victim-1 fully compromised</span>`);
+  }
+  if (t === 'payload_complete' && evt.source === 'victim-2') {
+    hostsCount++;
+    stat('stat-hosts', hostsCount);
+    add('term-victim', `${time} ${tag}<span class="text-green-400 font-semibold">victim-2 payload complete</span>`);
+  }
+  if (t === 'payload_complete' && evt.source === 'ci-runner') {
+    add('term-victim', `${time} ${tag}<span class="text-green-400 font-semibold">ci-runner payload complete</span>`);
+  }
+  if (t === 'v2_infection_complete' || t === 'ci_build_infected') {
+    if (hostsCount >= 3) {
+      addBanner('term-victim', 'ATTACK COMPLETE &#8212; 3 HOSTS COMPROMISED', '#ef4444');
+      el('btnLaunch').classList.add('hidden');
+      el('btnReset').classList.remove('hidden');
+      el('btnReplay').classList.remove('hidden');
+      el('replaySpeed').classList.remove('hidden');
+      el('debrief-files').textContent = fileCount;
+      el('debrief-intercepts').textContent = interceptCount;
+      el('debrief-repos').textContent = reposCount;
+      el('debrief-detections').textContent = detectCount;
+      setTimeout(() => el('debrief').classList.remove('hidden'), 800);
+    }
+  }
+  if (t === 'attack_complete') add('term-victim', `${time} <span class="text-green-400">${esc(d.message)}</span>`);
+
+  // --- Detection alerts ---
+  if (t === 'detection_alert') {
+    detectCount++;
+    stat('stat-detections', detectCount);
+    const sev = d.severity || 'medium';
+    const sevColor = sev === 'critical' ? 'text-red-400' : sev === 'high' ? 'text-orange-400' : 'text-yellow-400';
+    add('term-detections', `${time} ${defTag()}<span class="${sevColor} font-semibold">[${esc(sev.toUpperCase())}]</span> <span class="text-white">${esc(d.rule_name)}</span> <span class="text-gray-500">${esc(d.mitre_technique)}</span>`);
+    add('term-detections', `<span class="text-gray-600 ml-4 text-[10px]">${esc(d.description)} (source: ${esc(d.matched_source)})</span>`);
+  }
+  if (t === 'defender_online') {
+    add('term-detections', `${time} ${defTag()}<span class="text-green-400">Detection engine online: ${d.rules_loaded} rules loaded</span>`);
+  }
+
+  // --- Errors ---
+  if (t === 'payload_error') add('term-victim', `${time} ${tag}<span class="text-red-500">ERROR: ${esc((d.traceback || '').slice(0, 200))}</span>`);
+  if (t.includes('_error') && t !== 'payload_error' && t !== 'dns_exfil_error') add('term-victim', `${time} ${tag}<span class="text-red-500/60">${esc(t)}: ${esc(d.error || d.stderr || '')}</span>`);
+  if (t === 'dns_exfil_error') add('term-dns', `${time} ${tag}<span class="text-red-500">${esc(d.error)}</span>`);
+}
+
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+  ws.onmessage = (e) => handle(JSON.parse(e.data));
+  ws.onclose = () => setTimeout(connectWS, 1500);
+  ws.onerror = () => {};
+}
+
+async function launchAttack() {
+  const b = el('btnLaunch');
+  b.disabled = true;
+  b.textContent = 'Attacking...';
+  b.classList.remove('glow-red');
+  b.classList.add('opacity-50');
+  try { await fetch('/api/attack/start', { method: 'POST' }); }
+  catch (e) { add('term-victim', `<span class="text-red-500">${esc(e.message)}</span>`); }
+}
+
+async function resetAttack() {
+  try { await fetch('/api/attack/reset', { method: 'POST' }); } catch(e) {}
+  location.reload();
+}
+
+async function startReplay() {
+  const speed = el('replaySpeed').value;
+  try { await fetch(`/api/replay/start?speed=${speed}`, { method: 'POST' }); }
+  catch(e) { add('term-victim', `<span class="text-red-500">Replay error: ${esc(e.message)}</span>`); }
+}
+
+async function pollStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const s = await r.json();
+    const c = el('services');
+    c.innerHTML = '';
+    for (const [n, v] of Object.entries(s)) {
+      const color = v === 'ok' ? 'bg-green-500' : v === 'unreachable' ? 'bg-gray-600' : 'bg-red-500';
+      c.innerHTML += `<div class="flex items-center gap-1"><div class="w-1.5 h-1.5 rounded-full ${color}"></div><span class="text-gray-600 text-[10px]">${n.replace('_', '-')}</span></div>`;
+    }
+  } catch(e) {}
+}
+
+initMitre();
+connectWS();
+pollStatus();
+setInterval(pollStatus, 5000);
+</script>
+</body>
+</html>

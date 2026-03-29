@@ -1,0 +1,5 @@
+[user]
+    name = CI Pipeline
+    email = ci-bot@internal.corp
+[credential]
+    helper = store
